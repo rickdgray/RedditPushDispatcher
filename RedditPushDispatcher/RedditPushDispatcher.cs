@@ -22,6 +22,16 @@ namespace RedditPushDispatcher
         {
             _logger.LogInformation("Starting application.");
 
+            if (string.IsNullOrWhiteSpace(_settings.PushoverUserKey))
+            {
+                throw new ArgumentNullException("PushoverUserKey", "The user key was not specified!");
+            }
+
+            if (string.IsNullOrWhiteSpace(_settings.PushoverAppKey))
+            {
+                throw new ArgumentNullException("PushoverAppKey", "The app key was not specified!");
+            }
+
             using var client = new HttpClient();
 
             var lastPoll = DateTimeOffset.Now;
