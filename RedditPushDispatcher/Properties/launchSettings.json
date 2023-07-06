@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "RedditPushDispatcher": {
+      "commandName": "Project"
+    },
+    "Docker": {
+      "commandName": "Docker"
+    }
+  }
+}
