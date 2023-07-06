@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.6.33815.320
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RedditPushDispatcher", "RedditPushDispatcher\RedditPushDispatcher.csproj", "{CDE39902-4A3F-40BF-BD35-6D346447992A}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{CDE39902-4A3F-40BF-BD35-6D346447992A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CDE39902-4A3F-40BF-BD35-6D346447992A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CDE39902-4A3F-40BF-BD35-6D346447992A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CDE39902-4A3F-40BF-BD35-6D346447992A}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {A30B4541-22DD-4FE6-AEDD-291347CF49C6}
+	EndGlobalSection
+EndGlobal

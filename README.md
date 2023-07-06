@@ -1,2 +1,2 @@
 # RedditPushDispatcher
-Push new reddit posts to my phone
+Push new posts to your phone
