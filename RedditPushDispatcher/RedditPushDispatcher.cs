@@ -36,8 +36,6 @@ namespace RedditPushDispatcher
 
             var lastPoll = DateTimeOffset.Now;
 
-            lastPoll = lastPoll.AddHours(-4);
-
             _logger.LogDebug("Poll time: {lastPoll}", lastPoll);
 
             while (!stoppingToken.IsCancellationRequested)
