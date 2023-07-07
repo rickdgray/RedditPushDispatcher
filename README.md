@@ -13,9 +13,13 @@ Once you create an account and have both a `User Key` and an `API Token/Key`, yo
 * PollRateInMinutes (optional, defaults to 60)
 
 ## Deploying
-Simply build your image and run your container. Projects in .NET have an unusual folder structure, so we must both specify the context at the solution file, but also specify the location of the `dockerfile`. See below.
-
+Simply run with the necessary environment variables set and the image specified.
 ```bash
-docker build -t redditpushdispatcher -f .\RedditPushDispatcher\Dockerfile .
-docker run --env Settings__PushoverUserKey='abcd1234' --env Settings__PushoverAppKey='abcd1234' redditpushdispatcher
+docker run --env Settings__PushoverUserKey='abcd1234' --env Settings__PushoverAppKey='abcd1234' ghcr.io/rickdgray/redditpushdispatcher:main
+```
+
+## Building
+Projects in .NET have an unusual folder structure, so when building we must both specify the context to be at the root of the solution, but also specify the location of the `dockerfile`.
+```bash
+docker build -f .\RedditPushDispatcher\Dockerfile .
 ```
