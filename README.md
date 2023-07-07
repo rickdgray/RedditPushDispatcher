@@ -15,7 +15,7 @@ Once you create an account and have both a `User Key` and an `API Token/Key`, yo
 ## Deploying
 Simply run with the necessary environment variables set and the image specified.
 ```bash
-docker run --env Settings__PushoverUserKey='abcd1234' --env Settings__PushoverAppKey='abcd1234' ghcr.io/rickdgray/redditpushdispatcher:main
+docker run -d --env Settings__PushoverUserKey='abcd1234' --env Settings__PushoverAppKey='abcd1234' ghcr.io/rickdgray/redditpushdispatcher:main
 ```
 
 ## Building
