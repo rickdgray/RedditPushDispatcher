@@ -36,8 +36,6 @@ namespace RedditPushDispatcher
 
             var lastPoll = DateTimeOffset.Now;
 
-            _logger.LogDebug("Poll time: {lastPoll}", lastPoll);
-
             while (!stoppingToken.IsCancellationRequested)
             {
                 _logger.LogInformation("Pulling Feed.");
@@ -175,9 +173,12 @@ namespace RedditPushDispatcher
 
                 _logger.LogInformation(
                     "Pushed all notifications. Waiting until next poll time: {pollTime}",
-                    DateTime.Now.AddMinutes(_settings.PollRateInMinutes));
+                    DateTimeOffset.Now.AddMinutes(_settings.PollRateInMinutes));
 
                 await Task.Delay(_settings.PollRateInMinutes * 60000, stoppingToken);
+
+                lastPoll = DateTimeOffset.Now;
+                _logger.LogDebug("Poll time: {lastPoll}", lastPoll);
             }
         }
     }
