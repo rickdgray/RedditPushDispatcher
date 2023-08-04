@@ -175,10 +175,8 @@ namespace RedditPushDispatcher
                     "Pushed all notifications. Waiting until next poll time: {pollTime}",
                     DateTimeOffset.Now.AddMinutes(_settings.PollRateInMinutes));
 
-                await Task.Delay(_settings.PollRateInMinutes * 60000, stoppingToken);
-
                 lastPoll = DateTimeOffset.Now;
-                _logger.LogDebug("Poll time: {lastPoll}", lastPoll);
+                await Task.Delay(_settings.PollRateInMinutes * 60000, stoppingToken);
             }
         }
     }
