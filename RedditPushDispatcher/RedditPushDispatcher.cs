@@ -6,178 +6,217 @@ using System.Web;
 
 namespace RedditPushDispatcher
 {
-    internal class RedditPushDispatcher : BackgroundService
+    internal class RedditPushDispatcher(IOptions<Settings> settings,
+        ILogger<RedditPushDispatcher> logger) : BackgroundService
     {
-        private readonly Settings _settings;
-        private readonly ILogger<RedditPushDispatcher> _logger;
+        private readonly Settings _settings = settings.Value;
+        private readonly ILogger<RedditPushDispatcher> _logger = logger;
 
-        public RedditPushDispatcher(IOptions<Settings> settings,
-            ILogger<RedditPushDispatcher> logger)
+        // as per new httpclient guidelines
+        // https://learn.microsoft.com/en-us/dotnet/fundamentals/networking/http/httpclient-guidelines
+        private static readonly HttpClient _pushoverClient = new HttpClient(new SocketsHttpHandler
         {
-            _settings = settings.Value;
-            _logger = logger;
-        }
+            PooledConnectionLifetime = TimeSpan.FromMinutes(5)
+        });
 
-        protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+        protected override async Task ExecuteAsync(CancellationToken cancellationToken)
         {
             _logger.LogInformation("Starting application.");
 
-            if (string.IsNullOrWhiteSpace(_settings.PushoverUserKey))
-            {
-                throw new ArgumentNullException("PushoverUserKey", "The user key was not specified!");
-            }
-
-            if (string.IsNullOrWhiteSpace(_settings.PushoverAppKey))
-            {
-                throw new ArgumentNullException("PushoverAppKey", "The app key was not specified!");
-            }
-
-            using var client = new HttpClient();
-
             var lastPoll = DateTimeOffset.Now;
+            var failCount = 0;
 
-            while (!stoppingToken.IsCancellationRequested)
+            while (!cancellationToken.IsCancellationRequested)
             {
                 _logger.LogInformation("Pulling Feed.");
 
-                var doc = await new HtmlWeb().LoadFromWebAsync(_settings.RedditFeedUrl, stoppingToken);
-                var nodes = doc.DocumentNode
-                    .SelectSingleNode("//body/div[@class='content' and @role='main']/div[@id='siteTable']")
-                    ?.ChildNodes
-                    ?? throw new Exception("Couldn't load posts.");
+                HtmlNodeCollection? nodes = null;
 
-                _logger.LogInformation("Parsing data...");
-
-                var posts = new List<RedditPost>();
-                foreach (var node in nodes)
+                try
                 {
-                    stoppingToken.ThrowIfCancellationRequested();
-
-                    // not a post
-                    if (!node.HasClass("thing"))
-                    {
-                        continue;
-                    }
-
-                    // ignore spacers and ads
-                    if (node.HasClass("clearleft") || node.HasClass("promoted"))
-                    {
-                        continue;
-                    }
-
-                    if (!long.TryParse(node.GetDataAttribute("timestamp").Value, out long unixTimestamp))
-                    {
-                        continue;
-                    }
-
-                    var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(unixTimestamp).ToLocalTime();
-
-                    _logger.LogDebug("Timestamp: {timestamp}", timestamp);
-
-                    if (timestamp < lastPoll)
-                    {
-                        continue;
-                    }
-
-                    var relativePermalink = node.GetDataAttribute("permalink")?.Value ?? string.Empty;
-
-                    var postNode = node.SelectSingleNode(".//div[@class='top-matter']");
-
-                    var titleNode = postNode.SelectSingleNode("./p[@class='title']");
-                    var title = titleNode.InnerText.Trim().Split("&#32;").FirstOrDefault() ?? string.Empty;
-
-                    var flair = titleNode.FirstChild.GetAttributeValue("title", string.Empty);
-
-                    if (title.StartsWith(flair))
-                    {
-                        title = title[flair.Length..];
-                    }
-
-                    var commentsString = postNode.ChildNodes[3].InnerText ?? string.Empty;
-                    if (!string.IsNullOrEmpty(commentsString))
-                    {
-                        commentsString = commentsString.Trim().Split(" comment").FirstOrDefault();
-                    }
-
-                    if (!int.TryParse(commentsString, out int commentCount))
-                    {
-                        continue;
-                    }
-
-                    posts.Add(new RedditPost
-                    {
-                        Flair = flair,
-                        Title = HttpUtility.HtmlDecode(title),
-                        PostTime = timestamp,
-                        Url = $"https://reddit.com{relativePermalink}",
-                        CommentCount = commentCount
-                    });
+                    var doc = await new HtmlWeb().LoadFromWebAsync(_settings.RedditFeedUrl, cancellationToken);
+                    nodes = doc.DocumentNode
+                        .SelectSingleNode("//body/div[@class='content' and @role='main']/div[@id='siteTable']")
+                        ?.ChildNodes
+                        ?? throw new Exception("Couldn't load posts.");
+                    failCount = 0;
+                }
+                catch (HttpRequestException)
+                {
+                    failCount++;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogCritical(ex, "Couldn't load posts.");
+                    failCount++;
                 }
 
-                _logger.LogInformation("Found {count} new posts.", posts.Count);
-
-                var notifications = new List<Dictionary<string, string>>();
-
-                foreach (var post in posts)
+                if (failCount == 10)
                 {
-                    if (post == null)
-                    {
-                        continue;
-                    }
+                    _logger.LogInformation("Reddit not responding.");
 
-                    var data = new Dictionary<string, string>
-                    {
-                        { "token", _settings.PushoverAppKey },
-                        { "user", _settings.PushoverUserKey }
-                    };
-
-                    if (string.IsNullOrWhiteSpace(post.Title))
-                    {
-                        continue;
-                    }
-
-                    data.Add("message", $"{post.Title}. {post.CommentCount} comments.");
-
-                    if (string.IsNullOrWhiteSpace(post.Flair))
-                    {
-                        data.Add("title", "Gaming Leaks and Rumors");
-                    }
-                    else
-                    {
-                        data.Add("title", $"Gaming Leaks and Rumors: {post.Flair}");
-                    }
-
-                    if (!string.IsNullOrWhiteSpace(post.Url))
-                    {
-                        data.Add("url", post.Url);
-                        data.Add("url_title", "Read more");
-                    }
-
-                    notifications.Add(data);
-                    _logger.LogDebug("Queued notification. Count: {count}", notifications.Count);
+                    await PushNotification("RedditPushDispatcher", "Reddit not responding.", null, cancellationToken);
                 }
 
-                _logger.LogInformation("Queued all notifications. Count: {count}", notifications.Count);
-
-                foreach (var notification in notifications)
+                if (nodes != null)
                 {
-                    await client.PostAsync(
-                        "https://api.pushover.net/1/messages.json",
-                        new FormUrlEncodedContent(notification),
-                        stoppingToken);
+                    var posts = ParseHtml(nodes, lastPoll, cancellationToken);
 
-                    _logger.LogDebug("Pushed notification; delaying for 3 seconds...");
+                    foreach (var post in posts)
+                    {
+                        if (cancellationToken.IsCancellationRequested)
+                        {
+                            return;
+                        }
 
-                    await Task.Delay(3000, stoppingToken);
+                        if (post == null)
+                        {
+                            continue;
+                        }
+
+                        if (string.IsNullOrWhiteSpace(post.Title))
+                        {
+                            continue;
+                        }
+
+                        var title = "Gaming Leaks and Rumors";
+                        var message = $"{post.Title}. {post.CommentCount} comments.";
+
+                        if (!string.IsNullOrWhiteSpace(post.Flair))
+                        {
+                            title = $"{title}: {post.Flair}";
+                        }
+
+                        await PushNotification(title, message, post.Url, cancellationToken);
+
+                        _logger.LogDebug("Pushed notification; delaying for 3 seconds...");
+
+                        await Task.Delay(3000, cancellationToken);
+                    }
+
+                    _logger.LogInformation(
+                        "Pushed all notifications. Waiting until next poll time: {pollTime}",
+                        DateTimeOffset.Now.AddMinutes(_settings.PollRateInMinutes));
                 }
-
-                _logger.LogInformation(
-                    "Pushed all notifications. Waiting until next poll time: {pollTime}",
-                    DateTimeOffset.Now.AddMinutes(_settings.PollRateInMinutes));
 
                 lastPoll = DateTimeOffset.Now;
-                await Task.Delay(_settings.PollRateInMinutes * 60000, stoppingToken);
+                await Task.Delay(_settings.PollRateInMinutes * 60000, cancellationToken);
             }
+        }
+
+        private List<RedditPost> ParseHtml(HtmlNodeCollection nodes, DateTimeOffset lastPoll, CancellationToken cancellationToken = default)
+        {
+            _logger.LogInformation("Parsing data...");
+
+            var posts = new List<RedditPost>();
+            foreach (var node in nodes)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    return posts;
+                }
+
+                // not a post
+                if (!node.HasClass("thing"))
+                {
+                    continue;
+                }
+
+                // ignore spacers and ads
+                if (node.HasClass("clearleft") || node.HasClass("promoted"))
+                {
+                    continue;
+                }
+
+                if (!long.TryParse(node.GetDataAttribute("timestamp").Value, out long unixTimestamp))
+                {
+                    continue;
+                }
+
+                var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(unixTimestamp).ToLocalTime();
+
+                _logger.LogDebug("Timestamp: {timestamp}", timestamp);
+
+                if (timestamp < lastPoll)
+                {
+                    continue;
+                }
+
+                var relativePermalink = node.GetDataAttribute("permalink")?.Value ?? string.Empty;
+
+                var postNode = node.SelectSingleNode(".//div[@class='top-matter']");
+
+                var titleNode = postNode.SelectSingleNode("./p[@class='title']");
+                var title = titleNode.InnerText.Trim().Split("&#32;").FirstOrDefault() ?? string.Empty;
+
+                var flair = titleNode.FirstChild.GetAttributeValue("title", string.Empty);
+
+                if (title.StartsWith(flair))
+                {
+                    title = title[flair.Length..];
+                }
+
+                var commentsString = postNode.ChildNodes[3].InnerText ?? string.Empty;
+                if (!string.IsNullOrEmpty(commentsString))
+                {
+                    commentsString = commentsString.Trim().Split(" comment").FirstOrDefault();
+                }
+
+                if (!int.TryParse(commentsString, out int commentCount))
+                {
+                    continue;
+                }
+
+                posts.Add(new RedditPost
+                {
+                    Flair = flair,
+                    Title = HttpUtility.HtmlDecode(title),
+                    PostTime = timestamp,
+                    Url = $"https://reddit.com{relativePermalink}",
+                    CommentCount = commentCount
+                });
+            }
+
+            _logger.LogInformation("Found {count} new posts.", posts.Count);
+
+            return posts;
+        }
+
+        private async Task PushNotification(string title, string message, string? url = default, CancellationToken cancellationToken = default)
+        {
+            // TODO: customizable notification text
+            var notification = new Dictionary<string, string>
+            {
+                { "token", _settings.PushoverAppKey },
+                { "user", _settings.PushoverUserKey },
+                { "title", title },
+                { "message", message }
+            };
+
+            if (!string.IsNullOrWhiteSpace(url))
+            {
+                notification.Add("url", url);
+                notification.Add("url_title", "Read more");
+            }
+
+            try
+            {
+                await _pushoverClient.PostAsync(
+                    "https://api.pushover.net/1/messages.json",
+                    new FormUrlEncodedContent(notification),
+                    cancellationToken);
+            }
+            catch (HttpRequestException)
+            {
+                //TODO: retry logic
+            }
+            catch (TaskCanceledException ex)
+            {
+                //TODO: logging these for the time being for debugging
+                _logger.LogInformation(ex, "Task Cancelled Exception");
+            }
+
+            _logger.LogInformation("Notification pushed.");
         }
     }
 }
