@@ -6,7 +6,9 @@ using RedditPushDispatcher;
 var builder = Host.CreateApplicationBuilder();
 builder.Logging.AddConsole();
 builder.Services.AddHostedService<RedditPushDispatcher.RedditPushDispatcher>();
-builder.Services.Configure<Settings>(
-    builder.Configuration.GetSection(nameof(Settings)));
+builder.Services.AddOptions<Settings>()
+    .Bind(builder.Configuration.GetSection(nameof(Settings)))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
 
 builder.Build().Run();
