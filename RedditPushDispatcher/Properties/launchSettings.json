@@ -1,10 +1,18 @@
 {
   "profiles": {
     "RedditPushDispatcher": {
-      "commandName": "Project"
+      "commandName": "Project",
+      "environmentVariables": {
+        "Settings__PushoverUserKey": "abcd1234",
+        "Settings__PushoverAppKey": "abcd1234"
+      }
     },
     "Docker": {
-      "commandName": "Docker"
+      "commandName": "Docker",
+      "environmentVariables": {
+        "Settings__PushoverUserKey": "abcd1234",
+        "Settings__PushoverAppKey": "abcd1234"
+      }
     }
   }
 }
