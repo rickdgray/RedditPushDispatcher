@@ -62,6 +62,9 @@ namespace RedditPushDispatcher
                 {
                     var posts = ParseHtml(nodes, lastPoll, cancellationToken);
 
+                    // chronological order
+                    posts.Reverse();
+
                     foreach (var post in posts)
                     {
                         if (cancellationToken.IsCancellationRequested)
